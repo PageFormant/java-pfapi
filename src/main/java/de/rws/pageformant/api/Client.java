@@ -4,23 +4,31 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
+
 import java.net.URLDecoder;
+
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.StringTokenizer;
 
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.NameValuePair;
-import org.apache.commons.httpclient.methods.PostMethod;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.util.EntityUtils;
 
 public class Client {
 	String APIKEY;
 	String APIPASSWD;
 	
-	String VERSION = "1.0";
-	String BASE_URL = "http://pageformant.de/";
-	String API_URL = "api/betreiber/nvp/";
+	static String VERSION = "1.0";
+	static String BASE_URL = "http://pageformant.de/";
+	static String API_URL = "api/betreiber/nvp/";
 	
 	PageFormantException lastError = null;
 	
@@ -39,11 +47,12 @@ public class Client {
 			return false;
 		}
 		
-		List<NameValuePair> params = this.getDefaultParams();
-		params.add(new NameValuePair("METHOD","PostMessage"));
-		params.add(new NameValuePair("SERVICEID",String.valueOf(svcID)));
-		params.add(new NameValuePair("MESSAGE",message));
-		params.add(new NameValuePair("LINK",link));
+		
+		List <NameValuePair> params = this.getDefaultParams();
+		params.add(new BasicNameValuePair("METHOD","PostMessage"));
+		params.add(new BasicNameValuePair("SERVICEID",String.valueOf(svcID)));
+		params.add(new BasicNameValuePair("MESSAGE",message));
+		params.add(new BasicNameValuePair("LINK",link));
 		
 		this.lastError = null;
 		this.sendRequest(params);
@@ -52,29 +61,36 @@ public class Client {
 	}
 	
 	private void sendRequest(List<NameValuePair> params){
-		HttpClient client = new HttpClient();
+		DefaultHttpClient httpclient = new DefaultHttpClient();
+
+		HttpPost httpPost = new HttpPost(Client.BASE_URL + Client.API_URL);
 		
-		PostMethod method = new PostMethod(BASE_URL + API_URL);
-		method.addRequestHeader("User-Agent","PF-Agent");
-		try{
-			
-			method.setRequestBody(params.toArray(new NameValuePair[params.size()]));
-			
-            int statusCode = client.executeMethod(method);
-    		InputStream is = method.getResponseBodyAsStream();
-            InputStreamReader isr = new InputStreamReader(is);
-            char[] buffer = new char[1024];
-            String cont = "";
-            while(isr.read(buffer) != -1){
-            	cont += String.valueOf(buffer);
-            }
-            
-            this.handleResponse(statusCode, cont);
+		try {
+			httpPost.setEntity(new UrlEncodedFormEntity(params));
+			HttpResponse response = httpclient.execute(httpPost);
+
+		    int statusCode = response.getStatusLine().getStatusCode();
+		    HttpEntity entity = response.getEntity();
+		    InputStream is = entity.getContent();
+			InputStreamReader isr = new InputStreamReader(is);
+			char[] buffer = new char[1024];
+			String cont = "";
+			while(isr.read(buffer) != -1){
+			  cont += String.valueOf(buffer);
+			}
+			  
+			this.handleResponse(statusCode, cont);// do something useful with the response body
+		    // and ensure it is fully consumed
+		    EntityUtils.consume(entity);
+		} catch (UnsupportedEncodingException e) {
+			e.printStackTrace();
+		} catch (ClientProtocolException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+		    httpPost.releaseConnection();
 		}
-        catch(IOException e) {
-        	this.lastError = new PageFormantException(e.getMessage());
-        }
-		
 	}
 	
 	private void handleResponse(int code, String content){
@@ -99,9 +115,9 @@ public class Client {
 	
 	private List<NameValuePair> getDefaultParams(){
 		List<NameValuePair> result = new LinkedList<NameValuePair>();
-		result.add(new NameValuePair("APIVERSION", 	this.VERSION)); 
-		result.add(new NameValuePair("APIKEY", 		this.APIKEY));
-		result.add(new NameValuePair("APIPASSWD", 	this.APIPASSWD));
+		result.add(new BasicNameValuePair("APIVERSION", 	Client.VERSION)); 
+		result.add(new BasicNameValuePair("APIKEY", 		this.APIKEY));
+		result.add(new BasicNameValuePair("APIPASSWD", 	this.APIPASSWD));
 		return result;
 	}
 	
